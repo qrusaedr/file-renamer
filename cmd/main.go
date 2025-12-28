@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+type SearchConfig struct {
+	patterns []string
+	depth    int
+}
+
 type FileRenamer struct {
 	prefix  string
 	suffix  string
@@ -19,6 +24,9 @@ type FileRenamer struct {
 func main() {
 	dir := flag.String("dir", ".", "specifies the root directory to transverse")
 	pattern := flag.String("match", "*", "match filter the files based on given glob pattern")
+	depth := flag.Int("depth", -1, "depth of subdirectories to transverse relative to the root directory")
+
+	// file option
 	replace := flag.String("replace", "", "replaces part of the filename, use with \"-with\" flag")
 	with := flag.String("with", "", "provides replacement value, use with -replace flag")
 	prefix := flag.String("prefix", "", "adds prefix to filename")
@@ -27,7 +35,11 @@ func main() {
 	flag.Parse()
 	patternList := strings.Split(*pattern, ",")
 
-	fileList, err := listFiles(*dir, patternList)
+	fileList, err := listFiles(*dir, &SearchConfig{
+		patterns: patternList,
+		depth:    *depth,
+	})
+
 	if err != nil {
 		panic(err)
 	}
@@ -49,16 +61,30 @@ func main() {
 
 // listFiles func search the root directory, and returns a slice
 // containing filenames that matches a given pattern
-func listFiles(rootDir string, patterns []string) ([]string, error) {
+func listFiles(rootDir string, search *SearchConfig) ([]string, error) {
 	var filter []string
 
-	dirFs := os.DirFS(rootDir)
+	if !fs.ValidPath(rootDir) {
+		panic("directory transversal not allowed")
+	}
+
+	// the depth of root dir relative to from the dir the process is executed on
+	rootDeoth := strings.Count(rootDir, string(filepath.Separator))
+
+	dirFs := os.DirFS(".")
 	err := fs.WalkDir(dirFs, rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if ok := matchFilter(d.Name(), patterns); ok {
+		// calcutes depth of current directory then skip if equals search depth
+		depth := strings.Count(path, string(filepath.Separator)) - rootDeoth
+		if search.depth != -1 && depth >= search.depth {
+			return filepath.SkipDir
+		}
+
+		// filters filename that matches the patterns
+		if ok := matchFilter(d.Name(), search.patterns); ok {
 			filter = append(filter, path)
 		}
 
