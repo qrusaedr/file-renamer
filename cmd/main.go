@@ -26,7 +26,7 @@ func main() {
 	pattern := flag.String("match", "*", "match filter the files based on given glob pattern")
 	depth := flag.Int("depth", -1, "depth of subdirectories to transverse relative to the root directory")
 
-	// file option
+	// file options
 	replace := flag.String("replace", "", "replaces part of the filename, use with \"-with\" flag")
 	with := flag.String("with", "", "provides replacement value, use with -replace flag")
 	prefix := flag.String("prefix", "", "adds prefix to filename")
@@ -41,7 +41,7 @@ func main() {
 	})
 
 	if err != nil {
-		panic(err)
+		fmt.Println("rn:", err)
 	}
 
 	replacments := buildFileNames(fileList, &FileRenamer{
@@ -55,7 +55,8 @@ func main() {
 	previewChanges(replacments)
 	// rename file to a new filename
 	if err := changeFilenames(replacments); err != nil {
-		fmt.Println("not all file name changed")
+		fmt.Println("rn:", err)
+		os.Exit(1)
 	}
 }
 
@@ -63,22 +64,17 @@ func main() {
 // containing filenames that matches a given pattern
 func listFiles(rootDir string, search *SearchConfig) ([]string, error) {
 	var filter []string
-
-	if !fs.ValidPath(rootDir) {
-		panic("directory transversal not allowed")
-	}
+	path := filepath.Clean(rootDir)
 
 	// the depth of root dir relative to from the dir the process is executed on
-	rootDeoth := strings.Count(rootDir, string(filepath.Separator))
-
-	dirFs := os.DirFS(".")
-	err := fs.WalkDir(dirFs, rootDir, func(path string, d fs.DirEntry, err error) error {
+	rootDepth := strings.Count(path, string(filepath.Separator))
+	err := filepath.WalkDir(path, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
 		// calcutes depth of current directory then skip if equals search depth
-		depth := strings.Count(path, string(filepath.Separator)) - rootDeoth
+		depth := strings.Count(path, string(filepath.Separator)) - rootDepth
 		if search.depth != -1 && depth >= search.depth {
 			return filepath.SkipDir
 		}
@@ -101,7 +97,8 @@ func listFiles(rootDir string, search *SearchConfig) ([]string, error) {
 func changeFilenames(changeList map[string]string) error {
 	for k, v := range changeList {
 		if err := os.Rename(k, v); err != nil {
-			return err
+			lerr := err.(*os.LinkError)
+			return lerr.Err
 		}
 	}
 	return nil
@@ -112,7 +109,8 @@ func matchFilter(name string, patterns []string) bool {
 	for _, pattern := range patterns {
 		ok, err := filepath.Match(pattern, name)
 		if err != nil {
-			panic("invalid match expression")
+			fmt.Println("rn: invalid match expression")
+			os.Exit(1)
 		}
 
 		if ok {
@@ -131,8 +129,8 @@ func buildFileNames(filenames []string, replacement *FileRenamer) map[string]str
 	return replacements
 }
 
-// compileFileName builds a new name, replacement of old value in filename
-// occurs before pre/suffixes to avoid replacing
+// compileFileName builds a new filename, replacement of old value in filename
+// occurs before pre-/-suffixes to avoid potentially replacing them
 func compileFileName(filename string, replacement *FileRenamer) string {
 	ext := filepath.Ext(filename)
 	name := strings.TrimSuffix(filepath.Base(filename), ext)
