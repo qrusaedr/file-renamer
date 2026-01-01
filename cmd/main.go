@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -26,8 +27,9 @@ func main() {
 	dir := flag.String("dir", ".", "specifies the root directory to transverse")
 	pattern := flag.String("match", "*", "match filter the files based on given glob pattern")
 	depth := flag.Int("depth", -1, "depth of subdirectories to transverse relative to the root directory")
+	dryRun := flag.Bool("dry-run", false, "preview before running")
 
-	// file options
+	// rename flags
 	replace := flag.String("replace", "", "replaces part of the filename, use with \"-with\" flag")
 	with := flag.String("with", "", "provides replacement value, use with -replace flag")
 	prefix := flag.String("prefix", "", "adds prefix to filename")
@@ -56,8 +58,14 @@ func main() {
 	}
 
 	replacement := r.CompileAll(fileList)
-	// show a preview of to be made changes
-	previewChanges(replacement)
+
+	// if -dry-run flag is set to true,
+	// shows the changes without applying them until
+	// confirmation
+	if *dryRun {
+		showPreview(replacement) // show a preview of to be made changes
+		confirmChanges()         // promt for confirmation
+	}
 
 	if err := r.Rename(replacement); err != nil {
 		fmt.Println("rn:", err.Error())
@@ -67,8 +75,25 @@ func main() {
 
 // previewChanges output a previews to the stdout of the changes
 // that will be made to the files in the root directory
-func previewChanges(changeList map[string]string) {
+func showPreview(changeList map[string]string) {
 	for k, v := range changeList {
 		fmt.Println(k, "--->", v)
+	}
+}
+
+func confirmChanges() {
+	fmt.Print("would you like to apply changes (y/n): ")
+	in, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		fmt.Println("rn: end of file")
+	}
+
+	switch strings.TrimSpace(in) {
+	case "y", "yes":
+	case "n", "no":
+		fmt.Println("rn: renaming discountinued")
+		os.Exit(0)
+	default:
+		confirmChanges()
 	}
 }

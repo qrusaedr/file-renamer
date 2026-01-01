@@ -1,3 +1,8 @@
 ## File-renamer
 
-Just testing golang, since I'm learning the language.
+This is just a practice project.
+
+```
+  bash
+  ./main -dir="." -match="*.txt" -prefix="office_" -dry-run
+```
